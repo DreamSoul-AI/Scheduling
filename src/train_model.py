@@ -49,13 +49,13 @@ def runExperiment():
         model = model.to(cfg['device'])
         optimizer = make_optimizer(model.parameters(), cfg[cfg['tag']]['optimizer'])
         scheduler = make_scheduler(optimizer, cfg[cfg['tag']]['optimizer'])
-        logger = make_logger(cfg['logger_path'], data_name=cfg['data_name'])
+        logger = make_logger(cfg['logger_path'], worker_name=cfg['logger_worker_name'], data_name=cfg['data_name'])
     else:
         cfg['step'] = result['cfg']['step']
         model = model.to(cfg['device'])
         optimizer = make_optimizer(model.parameters(), cfg[cfg['tag']]['optimizer'])
         scheduler = make_scheduler(optimizer, cfg[cfg['tag']]['optimizer'])
-        logger = make_logger(cfg['logger_path'], data_name=cfg['data_name'])
+        logger = make_logger(cfg['logger_path'], worker_name=cfg['logger_worker_name'], data_name=cfg['data_name'])
         model.load_state_dict(result['model'])
         optimizer.load_state_dict(result['optimizer'])
         scheduler.load_state_dict(result['scheduler'])

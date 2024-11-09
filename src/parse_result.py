@@ -39,41 +39,26 @@ def runExperiment():
     cfg['best_path'] = os.path.join(cfg['tag_path'], 'best')
     cfg['logger_path'] = os.path.join('output', 'logger', 'train', 'runs', cfg['tag'])
     data = load_json_files(cfg['logger_path'])
-    # Example values (you would get these from the profiler JSON)
-    # base_time_ns = 1730957378053351300  # Base timestamp in nanoseconds
-    # event_timestamp_ns = 3214990543368.700  # Timestamp from the profiler (in nanoseconds)
-    #
-    # # Add the event timestamp to the base timestamp to get the actual timestamp
-    # actual_timestamp_ns = base_time_ns + event_timestamp_ns
-    #
-    # # Convert nanoseconds to seconds (1 second = 1e9 nanoseconds)
-    # actual_timestamp_sec = base_time_ns / 1e9
-    #
-    # # Convert the result to a datetime object (UTC time)
-    # utc_time = datetime.datetime.fromtimestamp(actual_timestamp_sec)
-    #
-    # # Print the datetime in a human-readable format
-    # print(f"Event UTC Time: {utc_time}")
-    # exit()
-    result = parse_data(data)
-    exit()
+    parse_data(data)
     return
+
 
 def tree():
     return defaultdict(tree)
 
+
 def parse_data(data):
     result = tree()
     for filename, data_i in data.items():
-        basetime = int(filename.split('.')[1]) / 1e9
-        basetime = datetime.datetime.fromtimestamp(basetime)
-        result[filename]['basetime'] = basetime
+        worker_name = filename.split('.')[0]
+        base_time = int(filename.split('.')[1]) / 1e9
+        base_time = datetime.datetime.fromtimestamp(base_time)
+        result[filename]['worker_name'] = worker_name
+        result[filename]['base_time'] = base_time
         result[filename]['trace']['memory'] = []
         for i in range(len(data_i['traceEvents'])):
             trace_i = data_i['traceEvents'][i]
-            parsed_i = parse_trace(trace_i, result[filename]['trace'])
-        print(result)
-        exit()
+            parse_trace(trace_i, result[filename]['trace'])
     return result
 
 

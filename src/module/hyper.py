@@ -1,3 +1,5 @@
+import socket
+import os
 from config import cfg
 from .stats import make_stats
 
@@ -37,4 +39,6 @@ def process_control():
     cfg[tag]['optimizer']['step_period'] = cfg['step_period']
     cfg[tag]['optimizer']['num_steps'] = cfg['num_steps']
     cfg[tag]['optimizer']['scheduler_name'] = 'CosineAnnealingLR'
+
+    cfg['logger_worker_name'] = '{}_{}'.format(socket.gethostname(), os.getpid())
     return

@@ -39,6 +39,7 @@ def runExperiment():
     cfg['logger_path'] = os.path.join('output', 'logger', 'test', 'runs', cfg['tag'])
     cfg['result_path'] = os.path.join('output', 'result', cfg['tag'])
     dataset = make_dataset(cfg['data_name'])
+    dataset = process_dataset(dataset)
     model = make_model(cfg['model'])
     result = resume(cfg['best_path'])
     if result is None:
@@ -46,9 +47,8 @@ def runExperiment():
     cfg['step'] = result['cfg']['step']
     model = model.to(cfg['device'])
     model.load_state_dict(result['model'])
-    dataset = process_dataset(dataset)
     data_loader = make_data_loader(dataset, cfg[cfg['tag']]['optimizer']['batch_size'])
-    test_logger = make_logger(cfg['logger_path'], data_name=cfg['data_name'])
+    test_logger = make_logger(cfg['logger_path'], worker_name=cfg['logger_worker_name'], data_name=cfg['data_name'])
     test(data_loader['test'], model, test_logger)
     result = resume(cfg['checkpoint_path'])
     result = {'cfg': cfg, 'logger': {'train': result['logger'],
@@ -58,22 +58,25 @@ def runExperiment():
 
 
 def test(data_loader, model, logger):
-    with torch.no_grad():
-        model.train(False)
-        for i, input in enumerate(data_loader):
-            input_size = input['data'].size(0)
-            input = to_device(input, cfg['device'])
-            output = model(**input)
-            evaluation = logger.evaluate('test', 'batch', input, output)
+    with logger.profiler:
+        with torch.no_grad():
+            model.train(False)
+            for i, input in enumerate(data_loader):
+                if cfg['profile']:
+                    logger.profiler.step()
+                input_size = input['data'].size(0)
+                input = to_device(input, cfg['device'])
+                output = model(**input)
+                evaluation = logger.evaluate('test', 'batch', input, output)
+                logger.append(evaluation, 'test', input_size)
+                logger.add('test', input, output)
+            evaluation = logger.evaluate('test', 'full')
             logger.append(evaluation, 'test', input_size)
-            logger.add('test', input, output)
-        evaluation = logger.evaluate('test', 'full')
-        logger.append(evaluation, 'test', input_size)
-        info = {'info': ['Model: {}'.format(cfg['tag']),
-                         'Test Epoch: {}({:.0f}%)'.format(cfg['step'] // cfg['eval_period'], 100.)]}
-        logger.append(info, 'test')
-        print(logger.write('test'))
-        logger.save(True)
+            info = {'info': ['Model: {}'.format(cfg['tag']),
+                             'Test Epoch: {}({:.0f}%)'.format(cfg['step'] // cfg['eval_period'], 100.)]}
+            logger.append(info, 'test')
+            print(logger.write('test'))
+            logger.save(True)
     return
 
 
