@@ -21,7 +21,7 @@ class Logger:
                     torch.profiler.ProfilerActivity.CPU,
                     torch.profiler.ProfilerActivity.CUDA,
                 ],
-                schedule=torch.profiler.schedule(wait=1, warmup=4, active=10, repeat=1),
+                schedule=torch.profiler.schedule(wait=2, warmup=3, active=10, repeat=1),
                 on_trace_ready=torch.profiler.tensorboard_trace_handler(self.path, worker_name=worker_name),
                 record_shapes=True,
                 profile_memory=True,

@@ -2,6 +2,8 @@ import argparse
 import datetime
 import json
 import os
+import numpy as np
+import matplotlib.pyplot as plt
 from collections import defaultdict
 
 import torch
@@ -37,9 +39,36 @@ def runExperiment():
     cfg['tag_path'] = os.path.join(cfg['path'], cfg['tag'])
     cfg['checkpoint_path'] = os.path.join(cfg['tag_path'], 'checkpoint')
     cfg['best_path'] = os.path.join(cfg['tag_path'], 'best')
-    cfg['logger_path'] = os.path.join('output', 'logger', 'train', 'runs', cfg['tag'])
+    cfg['logger_path'] = os.path.join(cfg['tag_path'], 'logger', 'train')
     data = load_json_files(cfg['logger_path'])
-    parse_data(data)
+    result = parse_data(data)
+    for filename in result:
+        print(result[filename]['worker_name'])
+        print(result[filename]['base_time'])
+        print(result[filename]['stats'])
+
+        # print(result[filename]['trace']['step'])
+        # memory = result[filename]['trace']['memory']
+        # ts, total_allocated, total_reserved = [], [], []
+        # for m in memory:
+        #     ts.append(m['ts'])
+        #     total_allocated.append(m.get('Total Allocated', 0))
+        #     total_reserved.append(m.get('Total Reserved', 0))
+        # # Sort based on ts and get sorted indices
+        # sorted_indices = sorted(range(len(ts)), key=lambda i: ts[i])
+        #
+        # # Reorder the lists based on sorted indices
+        # ts = [ts[i] for i in sorted_indices]
+        # total_allocated = [total_allocated[i] for i in sorted_indices]
+        # total_reserved = [total_reserved[i] for i in sorted_indices]
+        # plt.figure()
+        # # plt.plot(ts, total_allocated, label='Total Allocated')
+        # plt.plot(ts, total_reserved, label='Total Reserved')
+        # plt.xlabel('Timestamp (s)')
+        # plt.ylabel('Memory (bytes)')
+        # plt.title(f'Memory Usage for {filename}')
+        # plt.legend()
+        # plt.show()
     return
 
 
@@ -55,10 +84,19 @@ def parse_data(data):
         base_time = datetime.datetime.fromtimestamp(base_time)
         result[filename]['worker_name'] = worker_name
         result[filename]['base_time'] = base_time
-        result[filename]['trace']['memory'] = []
+        result[filename]['trace']['memory'] = {'ts': [], 'total_allocated': [], 'total_reserved': []}
         for i in range(len(data_i['traceEvents'])):
             trace_i = data_i['traceEvents'][i]
             parse_trace(trace_i, result[filename]['trace'])
+        result[filename]['runtime'] = {'duration': [], 'ts': []}
+        for step in result[filename]['trace']['step']:
+            result[filename]['runtime']['duration'].append(result[filename]['trace']['step'][step]['duration'])
+            result[filename]['runtime']['ts'].append(result[filename]['trace']['step'][step]['ts'])
+        result[filename]['stats']['runtime'] = make_stats(result[filename]['runtime']['duration'])
+        result[filename]['stats']['memory']['allocated'] = make_stats(
+            result[filename]['trace']['memory']['total_allocated'])
+        result[filename]['stats']['memory']['reserved'] = make_stats(
+            result[filename]['trace']['memory']['total_reserved'])
     return result
 
 
@@ -68,14 +106,12 @@ def parse_trace(trace, result):
         result['step'][step]['duration'] = trace['dur'] / 1e6
         result['step'][step]['ts'] = trace['ts'] / 1e9
     if trace['name'] == '[memory]':
-        memory = {}
-        if 'Total Allocated' in trace['args'] or 'Total Reserved' in trace['args']:
-            memory['ts'] = trace['ts'] / 1e9
-        if 'Total Allocated' in trace['args']:
-            memory['Total Allocated'] = trace['args']['Total Allocated']
-        if 'Total Reserved' in trace['args']:
-            memory['Total Reserved'] = trace['args']['Total Reserved']
-        result['memory'].append(memory)
+        ts = trace['ts'] / 1e9
+        total_allocated = trace['args']['Total Allocated']
+        total_reserved = trace['args']['Total Reserved']
+        result['memory']['ts'].append(ts)
+        result['memory']['total_allocated'].append(total_allocated)
+        result['memory']['total_reserved'].append(total_reserved)
     return
 
 
@@ -86,6 +122,13 @@ def load_json_files(logger_path):
             with open(os.path.join(logger_path, filename), 'r') as f:
                 json_data[filename] = json.load(f)
     return json_data
+
+
+def make_stats(data):
+    data = np.array(data)
+    stats = {'mean': data.mean(), 'std': data.std(), 'max': (data.max(), data.argmax()),
+             'min': (data.min(), data.argmin())}
+    return stats
 
 
 if __name__ == "__main__":
