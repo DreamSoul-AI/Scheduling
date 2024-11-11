@@ -3,11 +3,10 @@ import datetime
 import json
 import os
 import numpy as np
-import matplotlib.pyplot as plt
-from collections import defaultdict
-
 import torch
 import torch.backends.cudnn as cudnn
+from collections import defaultdict
+
 from config import cfg, process_args
 from module import process_control
 
@@ -46,29 +45,6 @@ def runExperiment():
         print(result[filename]['worker_name'])
         print(result[filename]['base_time'])
         print(result[filename]['stats'])
-
-        # print(result[filename]['trace']['step'])
-        # memory = result[filename]['trace']['memory']
-        # ts, total_allocated, total_reserved = [], [], []
-        # for m in memory:
-        #     ts.append(m['ts'])
-        #     total_allocated.append(m.get('Total Allocated', 0))
-        #     total_reserved.append(m.get('Total Reserved', 0))
-        # # Sort based on ts and get sorted indices
-        # sorted_indices = sorted(range(len(ts)), key=lambda i: ts[i])
-        #
-        # # Reorder the lists based on sorted indices
-        # ts = [ts[i] for i in sorted_indices]
-        # total_allocated = [total_allocated[i] for i in sorted_indices]
-        # total_reserved = [total_reserved[i] for i in sorted_indices]
-        # plt.figure()
-        # # plt.plot(ts, total_allocated, label='Total Allocated')
-        # plt.plot(ts, total_reserved, label='Total Reserved')
-        # plt.xlabel('Timestamp (s)')
-        # plt.ylabel('Memory (bytes)')
-        # plt.title(f'Memory Usage for {filename}')
-        # plt.legend()
-        # plt.show()
     return
 
 
