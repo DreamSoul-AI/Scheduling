@@ -1,12 +1,12 @@
 import argparse
-import copy
 import os
 import torch
 import torch.backends.cudnn as cudnn
-from dataset import make_dataset, make_data_loader, process_dataset
+from dataset import make_dataset, process_dataset
 from config import cfg, process_args
 from model import make_model
-from module import process_control, Summarizer
+from module import process_control
+from summarizer import Summarizer
 
 cudnn.benchmark = True
 parser = argparse.ArgumentParser(description='cfg')
@@ -42,6 +42,8 @@ def runExperiment():
     model = make_model(cfg['model'])
     summarizer = Summarizer()
     result = summarizer.summarize(dataset, model)
+    print(result)
     return
 
-
+if __name__ == "__main__":
+    main()

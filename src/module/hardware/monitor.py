@@ -5,13 +5,10 @@ from .cuda import CUDAReport
 
 
 class Monitor:
-    def __init__(self, cfg):
-        self.cfg = cfg
-
     def hardware(self):
         status = {}
         status['cpu'] = CPUReport().get_report()
-        if self.cfg['hardware']['cuda']['is_available']:
+        if torch.cuda.is_available:
             status['cuda'] = CUDAReport().get_report()
         return status
 
