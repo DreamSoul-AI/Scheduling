@@ -61,47 +61,94 @@ class Summarizer:
         return params
 
     def make_model_summary(self, mode, dataset, model):
-        def forward_hook(module_name, has_parameters, has_buffers, tied_param_names, module_index, param_index, buffer_index, module, args, output): ## TODO: continue fix this
+        def module_forward_hook_fn(module_name, has_parameters, has_buffers, tied_param_names, module_index,
+                                   param_index, buffer_index, module, args):
+            if len(module_name) == 0:
+                module_name = 'root'
             direction = 'forward'
-            name = 'module_{}_{}_{}'.format(param_index[0], direction, module_name)
-            info = {'type': 'module', 'index': param_index[0], 'direction': direction, 'name': module_name}
+            name = 'module_{}_{}_{}'.format(module_index[0], direction, module_name)
+            info = {'type': 'module', 'index': module_index[0], 'direction': direction, 'name': module_name}
+            module_index[0] += 1
             size, dtype, count, memory = [], [], [], []
             if has_parameters:
                 for param_name, param in module.named_parameters(recurse=False):
                     full_param_name = '{}.{}'.format(module_name, param_name)
                     if full_param_name in tied_param_names:
                         full_param_name = tied_param_names[full_param_name]
-                    name_i = 'param_{}_{}_{}'.format(param_index[0], direction, module_name)
-                    size, dtype, count, memory = make_stats(param)
-                    module_names_forward[module_name]['param'][param_name] = {'size': size, 'dtype': dtype,
-                                                                              'count': count, 'memory': memory}
+                    name_i = 'param_{}_{}_{}'.format(param_index[0], direction, full_param_name)
+                    info = {'type': 'param', 'index': param_index[0], 'direction': direction, 'name': full_param_name}
+                    param_index[0] += 1
+                    size_i, dtype_i, count_i, memory_i = make_stats(param)
+                    stats = {'size': size_i, 'dtype': dtype_i, 'count': count_i, 'memory': memory_i}
+                    summary[name_i] = {'info': info, 'stats': stats}
+                    size.append(size_i)
+                    dtype.append(dtype_i)
+                    count.append(count_i)
+                    memory.append(memory_i)
             if has_buffers:
                 for buffer_name, buffer in module.named_buffers(recurse=False):
-                    buffer_name = '{}.{}'.format(module_name, buffer_name)
-                    size, dtype, count, memory = make_stats(buffer)
-                    module_names_forward[module_name]['buffer'][buffer_name] = {'size': size, 'dtype': dtype,
-                                                                                'count': count, 'memory': memory}
+                    full_buffer_name = '{}.{}'.format(module_name, buffer_name)
+                    if full_buffer_name in tied_param_names:
+                        full_buffer_name = tied_param_names[full_buffer_name]
+                    name_i = 'buffer_{}_{}_{}'.format(buffer_index[0], direction, full_buffer_name)
+                    info = {'type': 'param', 'index': buffer_index[0], 'direction': direction, 'name': full_buffer_name}
+                    buffer_index[0] += 1
+                    size_i, dtype_i, count_i, memory_i = make_stats(buffer)
+                    stats = {'size': size_i, 'dtype': dtype_i, 'count': count_i, 'memory': memory_i}
+                    summary[name_i] = {'info': info, 'stats': stats}
+                    size.append(size_i)
+                    dtype.append(dtype_i)
+                    count.append(count_i)
+                    memory.append(memory_i)
             stats = {'size': size, 'dtype': dtype, 'count': count, 'memory': memory}
             summary[name] = {'info': info, 'stats': stats}
             return
 
-        def backward_hook(module_name, has_parameters, has_buffers, module, grad_input, grad_output):
-            module_names_backward[module_name] = {'param': {}, 'buffer': {}}
+        def module_backward_hook_fn(module_name, has_parameters, has_buffers, tied_param_names, module_index,
+                                    param_index, buffer_index,
+                                    module, grad_input):
+            if len(module_name) == 0:
+                module_name = 'root'
+            direction = 'backward'
+            name = 'module_{}_{}_{}'.format(module_index[0], direction, module_name)
+            info = {'type': 'module', 'index': module_index[0], 'direction': direction, 'name': module_name}
+            module_index[0] += 1
+            size, dtype, count, memory = [], [], [], []
             if has_parameters:
                 for param_name, param in module.named_parameters():
-                    param_name = '{}.{}'.format(module_name, param_name)
-                    size, dtype, count, memory = make_stats(param)
-                    module_names_backward[module_name]['param'][param_name] = {'size': size, 'dtype': dtype,
-                                                                               'count': count, 'memory': memory}
+                    full_param_name = '{}.{}'.format(module_name, param_name)
+                    if full_param_name in tied_param_names:
+                        full_param_name = tied_param_names[full_param_name]
+                    name_i = 'param_{}_{}_{}'.format(param_index[0], direction, full_param_name)
+                    info = {'type': 'param', 'index': param_index[0], 'direction': direction, 'name': full_param_name}
+                    param_index[0] += 1
+                    size_i, dtype_i, count_i, memory_i = make_stats(param)
+                    stats = {'size': size_i, 'dtype': dtype_i, 'count': count_i, 'memory': memory_i}
+                    summary[name_i] = {'info': info, 'stats': stats}
+                    size.append(size_i)
+                    dtype.append(dtype_i)
+                    count.append(count_i)
+                    memory.append(memory_i)
             if has_buffers:
                 for buffer_name, buffer in module.named_buffers():
-                    buffer_name = '{}.{}'.format(module_name, buffer_name)
-                    size, dtype, count, memory = make_stats(buffer)
-                    module_names_backward[module_name]['buffer'][buffer_name] = {'size': size, 'dtype': dtype,
-                                                                                 'count': count, 'memory': memory}
+                    full_buffer_name = '{}.{}'.format(module_name, buffer_name)
+                    if full_buffer_name in tied_param_names:
+                        full_buffer_name = tied_param_names[full_buffer_name]
+                    name_i = 'buffer_{}_{}_{}'.format(buffer_index[0], direction, full_buffer_name)
+                    info = {'type': 'param', 'index': buffer_index[0], 'direction': direction, 'name': full_buffer_name}
+                    buffer_index[0] += 1
+                    size_i, dtype_i, count_i, memory_i = make_stats(buffer)
+                    stats = {'size': size_i, 'dtype': dtype_i, 'count': count_i, 'memory': memory_i}
+                    summary[name_i] = {'info': info, 'stats': stats}
+                    size.append(size_i)
+                    dtype.append(dtype_i)
+                    count.append(count_i)
+                    memory.append(memory_i)
+            stats = {'size': size, 'dtype': dtype, 'count': count, 'memory': memory}
+            summary[name] = {'info': info, 'stats': stats}
             return
 
-        def grad_hook(summary, grad_index, param_name, param):
+        def grad_hook_fn(summary, grad_index, param_name, param):
             param.grad = None
             direction = 'backward'
             name = 'grad_{}_{}_{}'.format(grad_index[0], direction, param_name)
@@ -115,10 +162,10 @@ class Summarizer:
         def clean_hook():
             for param_hook_i in param_hook:
                 param_hook_i.remove()
-            for modules_names_forward_hook_i in modules_names_forward_hook:
-                modules_names_forward_hook_i.remove()
-            for module_names_backward_hook_i in module_names_backward_hook:
-                module_names_backward_hook_i.remove()
+            for module_forward_hook_i in module_forward_hook:
+                module_forward_hook_i.remove()
+            for module_backward_hook_i in module_backward_hook:
+                module_backward_hook_i.remove()
             return
 
         original_device = next(iter(model.parameters())).device
@@ -141,7 +188,7 @@ class Summarizer:
             for param_name, param in model.named_parameters():
                 if param.requires_grad:
                     param_hook.append(param.register_post_accumulate_grad_hook(
-                        partial(grad_hook, summary, grad_index, param_name)))
+                        partial(grad_hook_fn, summary, grad_index, param_name)))
 
         tied_param_names = {}
         for module_name, module in model.named_modules():
@@ -158,19 +205,23 @@ class Summarizer:
                         if full_buffer_name != unique_buffer_name and id(buffer) == id(unique_buffer):
                             tied_param_names[full_buffer_name] = unique_buffer_name
 
-        modules_names_forward_hook = []
-        module_names_backward_hook = []
+        module_forward_hook = []
+        module_backward_hook = []
+        module_index = [0]
         param_index = [0]
+        buffer_index = [0]
         for module_name, module in model.named_modules():
             has_parameters = any(p.numel() > 0 for p in module.parameters(recurse=False))
             has_buffers = any(p.numel() > 0 for p in module.buffers(recurse=False))
-            modules_names_forward_hook_i = module.register_forward_hook(
-                partial(forward_hook, module_name, has_parameters, has_buffers, tied_param_names, param_index))
-            modules_names_forward_hook.append(modules_names_forward_hook_i)
+            module_forward_hook_i = module.register_forward_pre_hook(
+                partial(module_forward_hook_fn, module_name, has_parameters, has_buffers, tied_param_names,
+                        module_index, param_index, buffer_index))
+            module_forward_hook.append(module_forward_hook_i)
             if mode == 'train':
-                module_names_backward_hook_i = module.register_full_backward_hook(partial(
-                    backward_hook, module_name, has_parameters, has_buffers, tied_param_names, param_index))
-                module_names_backward_hook.append(module_names_backward_hook_i)
+                module_backward_hook_i = module.register_full_backward_pre_hook(partial(
+                    module_backward_hook_fn, module_name, has_parameters, has_buffers, tied_param_names, module_index,
+                    param_index, buffer_index))
+                module_backward_hook.append(module_backward_hook_i)
 
         self.run(mode, dataset, model, self.batch_size, map_device, summary, offset=False)
         clean_hook()
@@ -183,9 +234,6 @@ class Summarizer:
         for name in summary:
             print(name, summary[name])
         exit()
-        # result = {'batch_size': self.batch_size, 'param_names_backward': param_names_backward, 'activation': activation,
-        #           'activation_offset': activation_offset, 'module_names_forward': module_names_forward,
-        #           'module_names_backward': module_names_backward, 'tied_param_names': tied_param_names}
         result = {'batch_size': self.batch_size, 'summary': summary}
         return result
 

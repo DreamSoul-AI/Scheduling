@@ -5,7 +5,7 @@ import torch.backends.cudnn as cudnn
 from dataset import make_dataset, process_dataset
 from config import cfg, process_args
 from model import make_model
-from module import process_control
+from module import process_control, save
 from summarizer import Summarizer
 
 cudnn.benchmark = True
@@ -43,6 +43,7 @@ def runExperiment():
     summarizer = Summarizer()
     result = summarizer.summarize(dataset, model)
     print(result)
+    save(result, os.path.join(cfg['tag_path'], 'summary'))
     return
 
 if __name__ == "__main__":
