@@ -2,6 +2,7 @@ import logging
 import torch
 from .cpu import CPUReport
 from .cuda import CUDAReport
+from .disk import DiskReport
 
 
 class Monitor:
@@ -10,26 +11,30 @@ class Monitor:
         status['cpu'] = CPUReport().get_report()
         if torch.cuda.is_available:
             status['cuda'] = CUDAReport().get_report()
+        status['disk'] = DiskReport().get_report()
+        print(status['cpu'])
+        print(status['cuda'])
+        print(status['disk'])
         return status
 
 
 def report_hardware(log=False):
-    status = {}
-    status['cpu'] = CPUReport()
-    msg = f'CPU Info: {status['cpu']}'
-    if log:
-        logger = logging.getLogger('main')
-        logger.info(msg)
-    else:
-        print(msg)
-    if torch.cuda.is_available():
-        status['cuda'] = CUDAReport()
-        msg = f'CUDA Info: {status['cuda']}'
+    def make_msg(msg):
         if log:
             logger = logging.getLogger('main')
             logger.info(msg)
         else:
             print(msg)
+        return
+
+    status = {}
+    status['cpu'] = CPUReport()
+    make_msg(f'CPU Info: {status['cpu']}')
+    if torch.cuda.is_available():
+        status['cuda'] = CUDAReport()
+        make_msg(f'CUDA Info: {status['cuda']}')
+    status['disk'] = DiskReport()
+    make_msg(f'Disk Info: {status['disk']}')
     return
 
 

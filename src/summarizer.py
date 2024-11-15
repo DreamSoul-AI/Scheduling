@@ -13,24 +13,16 @@ class Summarizer:
 
     def summarize(self, dataset, model):
         summary = {}
+        summary['batch_size'] = self.batch_size
         summary['data'] = self.make_data(dataset)
         summary['hardware'] = self.monitor.hardware()
         summary['params'] = self.make_params(model)
         if 'train' in dataset:
             model_summary = self.make_model_summary('train', dataset, model)
-            summary['batch_size'] = model_summary['batch_size']
-            summary['module_names_forward'] = model_summary['module_names_forward']
-            summary['module_names_backward'] = model_summary['module_names_backward']
-            summary['param_names_backward'] = model_summary['param_names_backward']
-            summary['activation'] = model_summary['activation']
-            summary['activation_offset'] = model_summary['activation_offset']
-            summary['tied_param_names'] = model_summary['tied_param_names']
         else:
             self.preload_model(model)
             model_summary = self.make_model_summary('test', dataset, model)
-            summary['batch_size'] = model_summary['batch_size']
-            summary['module_names_forward'] = model_summary['module_names_forward']
-
+        summary['model'] = model_summary
         summary['hardware'] = self.monitor.hardware()
         return summary
 
@@ -231,11 +223,7 @@ class Summarizer:
         model.to(original_device)
         for buffer_name, buffer in model.named_buffers():
             buffer.data.copy_(orig_buffer[buffer_name].data)
-        for name in summary:
-            print(name, summary[name])
-        exit()
-        result = {'batch_size': self.batch_size, 'summary': summary}
-        return result
+        return summary
 
     def preload_model(self, model):
         original_device = next(iter(model.parameters())).device
