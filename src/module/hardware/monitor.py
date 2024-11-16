@@ -12,9 +12,6 @@ class Monitor:
         if torch.cuda.is_available:
             status['cuda'] = CUDAReport().get_report()
         status['disk'] = DiskReport().get_report()
-        print(status['cpu'])
-        print(status['cuda'])
-        print(status['disk'])
         return status
 
 
