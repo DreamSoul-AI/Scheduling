@@ -2,6 +2,7 @@ import os
 import platform
 import psutil
 import time
+import numpy as np
 
 # Import WMI for Windows
 try:
@@ -11,8 +12,10 @@ except ImportError:
 
 
 class DiskInfo:
-    def __init__(self, name, total_space, free_space, used_space, percent_used, read_rate=None, write_rate=None,
-                 partitions=None):
+    def __init__(self, name, total_space, free_space, used_space, percent_used,
+                 read_rate, write_rate, partitions,
+                 read_latency, write_latency,
+                 read_busy_percentage, write_busy_percentage):
         self.name = name
         self.total_space = total_space
         self.free_space = free_space
@@ -21,6 +24,10 @@ class DiskInfo:
         self.read_rate = read_rate
         self.write_rate = write_rate
         self.partitions = partitions or []
+        self.read_latency = read_latency
+        self.write_latency = write_latency
+        self.read_busy_percentage = read_busy_percentage
+        self.write_busy_percentage = write_busy_percentage
 
     def state_dict(self):
         return {
@@ -31,6 +38,10 @@ class DiskInfo:
             'percent_used': self.percent_used,
             'read_rate': self.read_rate,
             'write_rate': self.write_rate,
+            'read_latency': self.read_latency,
+            'write_latency': self.write_latency,
+            'read_busy_percentage': self.read_busy_percentage,
+            'write_busy_percentage': self.write_busy_percentage,
             'partitions': self.partitions,
         }
 
@@ -43,12 +54,16 @@ class DiskInfo:
             f"Percent Used: {self.percent_used:.2f}%, "
             f"Read Rate: {self.read_rate:.2f} MB/s, "
             f"Write Rate: {self.write_rate:.2f} MB/s, "
+            f"Read Latency: {self.read_latency:.2f} ms, "
+            f"Write Latency: {self.write_latency:.2f} ms, "
+            f"Read Busy Percentage: {self.read_busy_percentage:.2f}%, "
+            f"Write Busy Percentage: {self.write_busy_percentage:.2f}%, "
             f"Partitions: [{partition_list}]"
         )
 
 
 class DiskReport:
-    def __init__(self, interval=0.1, num_samples=5):
+    def __init__(self, interval=1., num_samples=5):
         self.interval = interval
         self.num_samples = num_samples
         self.info = self.make_info()
@@ -57,8 +72,10 @@ class DiskReport:
         # Get the physical device-to-partition mapping
         physical_device_map = self._get_physical_device_map()
         # Initialize dictionaries to track read/write rates for physical devices
-        disk_samples = {device.lower(): {'read_bytes': [], 'write_bytes': []} for device in
-                        psutil.disk_io_counters(perdisk=True)}
+        disk_samples = {device.lower(): {'read_bytes': [], 'write_bytes': [],
+                                         'read_count': [], 'write_count': [],
+                                         'read_time': [], 'write_time': []}
+                        for device in psutil.disk_io_counters(perdisk=True)}
         disk_info_list = []
 
         try:
@@ -69,15 +86,31 @@ class DiskReport:
                     if device.lower() in disk_samples:
                         disk_samples[device.lower()]['read_bytes'].append(stats.read_bytes / 1024 ** 2)  # MB
                         disk_samples[device.lower()]['write_bytes'].append(stats.write_bytes / 1024 ** 2)  # MB
+                        disk_samples[device.lower()]['read_count'].append(stats.read_count)
+                        disk_samples[device.lower()]['write_count'].append(stats.write_count)
+                        disk_samples[device.lower()]['read_time'].append(stats.read_time)
+                        disk_samples[device.lower()]['write_time'].append(stats.write_time)
 
                 time.sleep(self.interval)
 
             # Process each physical device
             for physical_device, partitions in physical_device_map.items():
+                # Get samples for this device
+                samples = disk_samples.get(physical_device, {'read_bytes': [], 'write_bytes': [],
+                                                             'read_count': [], 'write_count': [],
+                                                             'read_time': [], 'write_time': []})
+                print(samples)
                 # Calculate read/write rates
-                samples = disk_samples.get(physical_device, {'read_bytes': [], 'write_bytes': []})
                 read_rate = self.calculate_rate(samples['read_bytes'])
                 write_rate = self.calculate_rate(samples['write_bytes'])
+
+                # Calculate average time per I/O operation
+                read_latency = self.calculate_latency(samples['read_time'], samples['read_count'])
+                write_latency = self.calculate_latency(samples['write_time'], samples['write_count'])
+
+                # Calculate disk busy percentage
+                read_busy_percentage = self.calculate_busy_percentage(samples['read_time'])
+                write_busy_percentage = self.calculate_busy_percentage(samples['write_time'])
 
                 # Combine space information from partitions
                 total_space, free_space, used_space, percent_used = self._aggregate_partition_usage(partitions)
@@ -92,7 +125,12 @@ class DiskReport:
                     read_rate=read_rate,
                     write_rate=write_rate,
                     partitions=partitions,
+                    read_latency=read_latency,
+                    write_latency=write_latency,
+                    read_busy_percentage=read_busy_percentage,
+                    write_busy_percentage=write_busy_percentage
                 )
+
                 disk_info_list.append(disk_info)
 
         except Exception as e:
@@ -101,10 +139,59 @@ class DiskReport:
         return disk_info_list
 
     def calculate_rate(self, samples):
+        """
+        Calculate the average rate of change for the given samples.
+        :param samples: List of cumulative values (e.g., read/write bytes).
+        :return: Average rate of change (per second).
+        """
         if len(samples) < 2:
             return 0
-        rates = [(samples[i] - samples[i - 1]) / self.interval for i in range(1, len(samples))]
-        return sum(rates) / len(rates)
+        samples = np.array(samples)
+        rates = np.diff(samples) / self.interval  # Calculate differences and normalize by interval
+        return np.mean(rates).item()  # Return the average rate
+
+    def calculate_latency(self, time_samples, count_samples):
+        """
+        Calculate the average latency for I/O operations using NumPy.
+        :param time_samples: List of cumulative time spent on read/write operations (in milliseconds).
+        :param count_samples: List of cumulative read/write operation counts.
+        :return: Average latency per I/O operation (in milliseconds).
+        """
+        if len(time_samples) < 2 or len(count_samples) < 2:
+            return 0
+        time_samples = np.array(time_samples)
+        count_samples = np.array(count_samples)
+
+        # Calculate total time
+        total_time = time_samples[-1] - time_samples[0]
+        if total_time == 0:  # Fallback to len(samples) * interval if total time is zero
+            total_time = len(time_samples) * self.interval * 1000  # Convert interval to milliseconds
+
+        # Calculate total operations
+        total_operations = count_samples[-1] - count_samples[0]
+        if total_operations == 0:  # No operations, latency should be zero
+            return 0
+
+        return total_time / total_operations  # Average latency per operation
+
+    def calculate_busy_percentage(self, time_samples):
+        """
+        Calculate the percentage of time the disk is busy handling a specific type of I/O (read or write).
+        :param time_samples: List of cumulative time spent on read or write operations (in milliseconds).
+        :return: Busy percentage over the sampling period.
+        """
+        if len(time_samples) < 2:
+            return 0
+        time_samples = np.array(time_samples)
+
+        # Calculate total I/O time
+        total_time = time_samples[-1] - time_samples[0]
+
+        # Total sampling time in milliseconds
+        total_sampling_time = self.interval * self.num_samples * 1000  # Convert seconds to milliseconds
+
+        # Calculate busy percentage
+        return (total_time / total_sampling_time) * 100 if total_sampling_time > 0 else 0
 
     def _get_physical_device_map(self):
         """
