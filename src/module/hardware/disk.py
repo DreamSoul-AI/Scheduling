@@ -63,7 +63,7 @@ class DiskInfo:
 
 
 class DiskReport:
-    def __init__(self, interval=1., num_samples=5):
+    def __init__(self, interval=0.1, num_samples=5):
         self.interval = interval
         self.num_samples = num_samples
         self.info = self.make_info()
@@ -99,7 +99,6 @@ class DiskReport:
                 samples = disk_samples.get(physical_device, {'read_bytes': [], 'write_bytes': [],
                                                              'read_count': [], 'write_count': [],
                                                              'read_time': [], 'write_time': []})
-                print(samples)
                 # Calculate read/write rates
                 read_rate = self.calculate_rate(samples['read_bytes'])
                 write_rate = self.calculate_rate(samples['write_bytes'])

@@ -3,6 +3,7 @@ import torch
 from .cpu import CPUReport
 from .cuda import CUDAReport
 from .disk import DiskReport
+from .network import NetworkReport
 
 
 class Monitor:
@@ -12,7 +13,8 @@ class Monitor:
         if torch.cuda.is_available:
             status['cuda'] = CUDAReport().get_report()
         status['disk'] = DiskReport().get_report()
-        print(status['disk'])
+        status['network'] = NetworkReport().get_report()
+        print(status['network'])
         exit()
         return status
 
