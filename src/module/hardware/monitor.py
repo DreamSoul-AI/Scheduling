@@ -14,7 +14,7 @@ class Monitor:
             status['cuda'] = CUDAReport().get_report()
         status['disk'] = DiskReport().get_report()
         status['network'] = NetworkReport().get_report()
-        print(status['network'])
+        print(status['cuda'])
         exit()
         return status
 

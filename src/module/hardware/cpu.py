@@ -75,12 +75,8 @@ class CPUReport:
 
     def compute_mean(self, data):
         if len(data) > 0:
-            data = np.array(data)
-            data = np.mean(data, axis=0)
-            data = data.tolist()
-        else:
-            data = None
-        return data
+            return np.mean(data, axis=0).tolist()
+        return None
 
     def make_info(self):
         total_memory_samples = []
