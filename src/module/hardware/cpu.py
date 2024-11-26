@@ -1,13 +1,14 @@
 import psutil
 import time
 import numpy as np
+import cpuinfo
 
 
 class CPUInfo:
     def __init__(self, name, cores, total_memory, free_memory, used_memory, memory_utilization,
                  cpu_utilization, per_cpu_utilization, cpu_frequencies, per_cpu_frequencies,
                  temperature, ctx_switches, interrupts, num_threads, num_processes,
-                 page_ins, page_outs):
+                 page_ins, page_outs, static_info):
         self.name = name
         self.cores = cores
         self.total_memory = total_memory
@@ -25,6 +26,7 @@ class CPUInfo:
         self.num_processes = num_processes
         self.page_ins = page_ins
         self.page_outs = page_outs
+        self.static_info = static_info
 
     def state_dict(self):
         return {
@@ -44,27 +46,34 @@ class CPUInfo:
             'num_threads': self.num_threads,
             'num_processes': self.num_processes,
             'page_ins': self.page_ins,
-            'page_outs': self.page_outs
+            'page_outs': self.page_outs,
+            'static_info': self.static_info
         }
 
     def __repr__(self):
-        return (f'{self.name}: '
-                f'Cores: {self.cores}, '
-                f'Total Memory: {self.total_memory:.2f} MB, '
-                f'Free Memory: {self.free_memory:.2f} MB, '
-                f'Used Memory: {self.used_memory:.2f} MB, '
-                f'Memory Utilization: {self.memory_utilization:.2f}%, '
-                f'CPU Utilization: {self.cpu_utilization:.2f}%, '
-                f'Per-Core Utilization: {self.per_cpu_utilization}, '
-                f'CPU Frequencies: {self.cpu_frequencies:.2f} MHz, '
-                f'Per-Core Frequencies: {self.per_cpu_frequencies}, '
-                f'Temperature: {self.temperature:.2f} C, '
-                f'Context Switches: {self.ctx_switches}, '
-                f'Interrupts: {self.interrupts}, '
-                f'Num Threads: {self.num_threads}, '
-                f'Num Processes: {self.num_processes}, '
-                f'Page Ins: {self.page_ins}, '
-                f'Page Outs: {self.page_outs}')
+        repr_str = (f'{self.name}: '
+                    f'Cores: {self.cores}, '
+                    f'Total Memory: {self.total_memory:.2f} MB, '
+                    f'Free Memory: {self.free_memory:.2f} MB, '
+                    f'Used Memory: {self.used_memory:.2f} MB, '
+                    f'Memory Utilization: {self.memory_utilization:.2f}%, '
+                    f'CPU Utilization: {self.cpu_utilization:.2f}%, '
+                    f'Per-Core Utilization: {self.per_cpu_utilization}, '
+                    f'CPU Frequencies: {self.cpu_frequencies:.2f} MHz, '
+                    f'Per-Core Frequencies: {self.per_cpu_frequencies}, '
+                    f'Temperature: {self.temperature:.2f} C, '
+                    f'Context Switches: {self.ctx_switches}, '
+                    f'Interrupts: {self.interrupts}, '
+                    f'Num Threads: {self.num_threads}, '
+                    f'Num Processes: {self.num_processes}, '
+                    f'Page Ins: {self.page_ins}, '
+                    f'Page Outs: {self.page_outs}, ')
+
+        if self.static_info is not None:
+            static_info_str = ", ".join([f'{key}: {value}' for key, value in self.static_info.items()])
+            repr_str += f'Static Info: {static_info_str}'
+
+        return repr_str
 
 
 class CPUReport:
@@ -136,6 +145,9 @@ class CPUReport:
 
             cores = psutil.cpu_count(logical=True)
 
+            # Get static CPU information
+            static_info = cpuinfo.get_cpu_info()
+
             # Process all samples to compute means
             info = CPUInfo(
                 name='CPU',
@@ -154,7 +166,8 @@ class CPUReport:
                 num_threads=self.compute_mean(num_threads_samples),
                 num_processes=self.compute_mean(num_processes_samples),
                 page_ins=self.compute_mean(page_ins_samples),
-                page_outs=self.compute_mean(page_outs_samples)
+                page_outs=self.compute_mean(page_outs_samples),
+                static_info=static_info
             )
             return info
 
