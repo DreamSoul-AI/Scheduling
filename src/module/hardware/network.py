@@ -1,44 +1,24 @@
 import psutil
+import socket
 import time
 import numpy as np
 
 
 class NetworkInfo:
-    def __init__(self, name, sent_rate, recv_rate, packets_sent_rate, packets_recv_rate,
-                 err_in_rate, err_out_rate, drop_in_rate, drop_out_rate):
-        self.name = name
-        self.sent_rate = sent_rate
-        self.recv_rate = recv_rate
-        self.packets_sent_rate = packets_sent_rate
-        self.packets_recv_rate = packets_recv_rate
-        self.err_in_rate = err_in_rate
-        self.err_out_rate = err_out_rate
-        self.drop_in_rate = drop_in_rate
-        self.drop_out_rate = drop_out_rate
+    def __init__(self, static, monitor):
+        self.static = static
+        self.monitor = monitor
 
     def state_dict(self):
         return {
-            'name': self.name,
-            'sent_rate': self.sent_rate,
-            'recv_rate': self.recv_rate,
-            'packets_sent_rate': self.packets_sent_rate,
-            'packets_recv_rate': self.packets_recv_rate,
-            'err_in_rate': self.err_in_rate,
-            'err_out_rate': self.err_out_rate,
-            'drop_in_rate': self.drop_in_rate,
-            'drop_out_rate': self.drop_out_rate,
+            "static": self.static,
+            "monitor": self.monitor,
         }
 
     def __repr__(self):
-        return (f"{self.name}: "
-                f"Send Rate: {self.sent_rate:.2f} MB/s, "
-                f"Receive Rate: {self.recv_rate:.2f} MB/s, "
-                f"Packets Sent Rate: {self.packets_sent_rate:.2f}/s, "
-                f"Packets Received Rate: {self.packets_recv_rate:.2f}/s, "
-                f"Error In Rate: {self.err_in_rate:.2f}/s, "
-                f"Error Out Rate: {self.err_out_rate:.2f}/s, "
-                f"Dropped In Rate: {self.drop_in_rate:.2f}/s, "
-                f"Dropped Out Rate: {self.drop_out_rate:.2f}/s")
+        static_repr = ", ".join(f"{key}: {value}" for key, value in self.static.items())
+        monitor_repr = ", ".join(f"{key}: {value}" for key, value in self.monitor.items())
+        return f"Static Info: {static_repr}\nMonitoring Info: {monitor_repr}"
 
 
 class NetworkReport:
@@ -47,55 +27,8 @@ class NetworkReport:
         self.num_samples = num_samples
         self.info = self.make_info()
 
-    def make_info(self):
-        try:
-            # Initialize cumulative sample containers
-            sent_samples = []
-            recv_samples = []
-            packets_sent_samples = []
-            packets_recv_samples = []
-            err_in_samples = []
-            err_out_samples = []
-            drop_in_samples = []
-            drop_out_samples = []
-
-            for _ in range(self.num_samples):
-                net_stats = psutil.net_io_counters()
-                sent_samples.append(net_stats.bytes_sent / 1024 ** 2)  # Convert to MB
-                recv_samples.append(net_stats.bytes_recv / 1024 ** 2)  # Convert to MB
-                packets_sent_samples.append(net_stats.packets_sent)
-                packets_recv_samples.append(net_stats.packets_recv)
-                err_in_samples.append(net_stats.errin)
-                err_out_samples.append(net_stats.errout)
-                drop_in_samples.append(net_stats.dropin)
-                drop_out_samples.append(net_stats.dropout)
-
-                time.sleep(self.interval)
-
-            # Compute rates using differences
-            sent_rate = self.calculate_rate(sent_samples)
-            recv_rate = self.calculate_rate(recv_samples)
-            packets_sent_rate = self.calculate_rate(packets_sent_samples)
-            packets_recv_rate = self.calculate_rate(packets_recv_samples)
-            err_in_rate = self.calculate_rate(err_in_samples)
-            err_out_rate = self.calculate_rate(err_out_samples)
-            drop_in_rate = self.calculate_rate(drop_in_samples)
-            drop_out_rate = self.calculate_rate(drop_out_samples)
-
-            return NetworkInfo(
-                name="Network",
-                sent_rate=sent_rate,
-                recv_rate=recv_rate,
-                packets_sent_rate=packets_sent_rate,
-                packets_recv_rate=packets_recv_rate,
-                err_in_rate=err_in_rate,
-                err_out_rate=err_out_rate,
-                drop_in_rate=drop_in_rate,
-                drop_out_rate=drop_out_rate,
-            )
-
-        except Exception as e:
-            raise ValueError(f"Failed to retrieve network information: {str(e)}")
+    def compute_mean(self, data):
+        return np.mean(data, axis=0).tolist() if data else None
 
     def calculate_rate(self, samples):
         """
@@ -108,6 +41,96 @@ class NetworkReport:
         samples = np.array(samples)
         rates = np.diff(samples) / self.interval  # Calculate differences and normalize by interval
         return np.mean(rates).item()  # Return the average rate
+
+    def make_static_info(self):
+        network_interfaces = psutil.net_if_addrs()
+        network_stats = psutil.net_if_stats()
+
+        static_info = {}
+
+        # Gather detailed information about each interface
+        for interface in network_interfaces:
+            # IP, MAC, IPv6 for each interface
+            ip_info = {"IPv4": None, "IPv6": None, "MAC": None}
+            for addr in network_interfaces[interface]:
+                # Handle valid address families: AF_INET, AF_INET6, and AF_LINK (MAC address)
+                if addr.family == socket.AF_INET:
+                    ip_info["IPv4"] = addr.address
+                elif addr.family == socket.AF_INET6:
+                    ip_info["IPv6"] = addr.address
+                elif addr.family == socket.AF_LINK or addr.family == -1:
+                    # Handle AF_LINK (MAC address)
+                    ip_info["MAC"] = addr.address.replace('-', ':')
+
+            # Interface stats (up/down, speed, duplex)
+            stats = network_stats.get(interface, None)
+            if stats:
+                interface_status = "up" if stats.isup else "down"
+                interface_speed = stats.speed  # in Mbps
+                interface_duplex = stats.duplex  # Full or Half duplex
+            else:
+                interface_status = "unknown"
+                interface_speed = "unknown"
+                interface_duplex = "unknown"
+
+            # Use the actual interface name as the key
+            static_info[interface] = {
+                "ip_info": ip_info,
+                "status": interface_status,
+                "speed": interface_speed,
+                "duplex": interface_duplex
+            }
+        return static_info
+
+    def make_monitor_info(self):
+        sent_samples = []
+        recv_samples = []
+        packets_sent_samples = []
+        packets_recv_samples = []
+        err_in_samples = []
+        err_out_samples = []
+        drop_in_samples = []
+        drop_out_samples = []
+
+        for _ in range(self.num_samples):
+            net_stats = psutil.net_io_counters()
+            sent_samples.append(net_stats.bytes_sent / 1024 ** 2)  # Convert to MB
+            recv_samples.append(net_stats.bytes_recv / 1024 ** 2)  # Convert to MB
+            packets_sent_samples.append(net_stats.packets_sent)
+            packets_recv_samples.append(net_stats.packets_recv)
+            err_in_samples.append(net_stats.errin)
+            err_out_samples.append(net_stats.errout)
+            drop_in_samples.append(net_stats.dropin)
+            drop_out_samples.append(net_stats.dropout)
+
+            time.sleep(self.interval)
+
+        # Calculate rates for each sample
+        sent_rate = self.calculate_rate(sent_samples)
+        recv_rate = self.calculate_rate(recv_samples)
+        packets_sent_rate = self.calculate_rate(packets_sent_samples)
+        packets_recv_rate = self.calculate_rate(packets_recv_samples)
+        err_in_rate = self.calculate_rate(err_in_samples)
+        err_out_rate = self.calculate_rate(err_out_samples)
+        drop_in_rate = self.calculate_rate(drop_in_samples)
+        drop_out_rate = self.calculate_rate(drop_out_samples)
+
+        monitor_info = {
+            "sent_rate": sent_rate,
+            "recv_rate": recv_rate,
+            "packets_sent_rate": packets_sent_rate,
+            "packets_recv_rate": packets_recv_rate,
+            "err_in_rate": err_in_rate,
+            "err_out_rate": err_out_rate,
+            "drop_in_rate": drop_in_rate,
+            "drop_out_rate": drop_out_rate,
+        }
+        return monitor_info
+
+    def make_info(self):
+        static_info = self.make_static_info()
+        monitor_info = self.make_monitor_info()
+        return NetworkInfo(static=static_info, monitor=monitor_info)
 
     def get_report(self):
         return self.info.state_dict()
