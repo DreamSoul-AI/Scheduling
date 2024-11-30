@@ -22,7 +22,7 @@ class NetworkInfo:
 
 
 class NetworkReport:
-    def __init__(self, interval=1.0, num_samples=5):
+    def __init__(self, interval=0.1, num_samples=5):
         self.interval = interval
         self.num_samples = num_samples
         self.info = self.make_info()
